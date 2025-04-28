@@ -7,6 +7,7 @@ from aiohttp_socks import ProxyConnector
 from fake_useragent import FakeUserAgent
 from eth_account import Account
 from eth_account.messages import encode_defunct
+from eth_utils import to_hex
 from datetime import datetime
 from colorama import *
 import asyncio, json, os, pytz
@@ -113,6 +114,7 @@ class Coresky:
         try:
             account = Account.from_key(account)
             address = account.address
+
             return address
         except Exception as e:
             return None
@@ -122,13 +124,15 @@ class Coresky:
             message = f"Welcome to CoreSky!\n\nClick to sign in and accept the CoreSky Terms of Service.\n\nThis request will not trigger a blockchain transaction or cost any gas fees.\n\nYour authentication status will reset after 24 hours.\n\nWallet address:\n\n{address}"
             encoded_message = encode_defunct(text=message)
             signed_message = Account.sign_message(encoded_message, private_key=account)
-            signature = signed_message.signature.hex()
+            signature = to_hex(signed_message.signature)
+
             payload = {
                 "address":address,
                 "signature":signature,
                 "refCode":self.ref_code,
                 "projectId":"0"
             }
+
             return payload
         except Exception as e:
             return None
@@ -179,7 +183,6 @@ class Coresky:
                 if attempt < retries - 1:
                     await asyncio.sleep(5)
                     continue
-
                 return None
             
     async def score_detail(self, address: str, token: str, proxy=None, retries=5):
@@ -203,7 +206,6 @@ class Coresky:
                 if attempt < retries - 1:
                     await asyncio.sleep(5)
                     continue
-
                 return None
             
     async def claim_checkin(self, token: str, proxy=None, retries=5):
@@ -225,7 +227,6 @@ class Coresky:
                 if attempt < retries - 1:
                     await asyncio.sleep(5)
                     continue
-
                 return None
 
     async def process_accounts(self, account: str, address, use_proxy: bool):

@@ -1,6 +1,8 @@
+web3
 aiohttp
 aiohttp-socks
-eth-account
 fake-useragent
+eth-account
+eth-utils
 colorama
 pytz
