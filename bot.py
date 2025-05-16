@@ -26,10 +26,11 @@ class Coresky:
             "Sec-Fetch-Site": "same-origin",
             "User-Agent": FakeUserAgent().random
         }
+        self.BASE_API = "https://www.coresky.com"
+        self.ref_code = "s9ztsx" # U can change it with yours.
         self.proxies = []
         self.proxy_index = 0
         self.account_proxies = {}
-        self.ref_code = "s9ztsx"
 
     def clear_terminal(self):
         os.system('cls' if os.name == 'nt' else 'clear')
@@ -144,10 +145,10 @@ class Coresky:
     def print_question(self):
         while True:
             try:
-                print("1. Run With Monosans Proxy")
-                print("2. Run With Private Proxy")
-                print("3. Run Without Proxy")
-                choose = int(input("Choose [1/2/3] -> ").strip())
+                print(f"{Fore.WHITE + Style.BRIGHT}1. Run With Monosans Proxy{Style.RESET_ALL}")
+                print(f"{Fore.WHITE + Style.BRIGHT}2. Run With Private Proxy{Style.RESET_ALL}")
+                print(f"{Fore.WHITE + Style.BRIGHT}3. Run Without Proxy{Style.RESET_ALL}")
+                choose = int(input(f"{Fore.BLUE + Style.BRIGHT}Choose [1/2/3] -> {Style.RESET_ALL}").strip())
 
                 if choose in [1, 2, 3]:
                     proxy_type = (
@@ -156,14 +157,37 @@ class Coresky:
                         "Run Without Proxy"
                     )
                     print(f"{Fore.GREEN + Style.BRIGHT}{proxy_type} Selected.{Style.RESET_ALL}")
-                    return choose
+                    break
                 else:
                     print(f"{Fore.RED + Style.BRIGHT}Please enter either 1, 2 or 3.{Style.RESET_ALL}")
             except ValueError:
                 print(f"{Fore.RED + Style.BRIGHT}Invalid input. Enter a number (1, 2 or 3).{Style.RESET_ALL}")
 
+        rotate = False
+        if choose in [1, 2]:
+            while True:
+                rotate = input(f"{Fore.BLUE + Style.BRIGHT}Rotate Invalid Proxy? [y/n] -> {Style.RESET_ALL}").strip()
+
+                if rotate in ["y", "n"]:
+                    rotate = rotate == "y"
+                    break
+                else:
+                    print(f"{Fore.RED + Style.BRIGHT}Invalid input. Enter 'y' or 'n'.{Style.RESET_ALL}")
+
+        return choose, rotate
+    
+    async def check_connection(self, proxy=None):
+        connector = ProxyConnector.from_url(proxy) if proxy else None
+        try:
+            async with ClientSession(connector=connector, timeout=ClientTimeout(total=30)) as session:
+                async with session.get(url=self.BASE_API, headers={}) as response:
+                    response.raise_for_status()
+                    return True
+        except (Exception, ClientResponseError) as e:
+            return None
+
     async def user_login(self, account: str, address: str, proxy=None, retries=5):
-        url = "https://www.coresky.com/api/user/login"
+        url = f"{self.BASE_API}/api/user/login"
         data = json.dumps(self.generate_payload(account, address))
         headers = {
             **self.headers,
@@ -178,7 +202,7 @@ class Coresky:
                     async with session.post(url=url, headers=headers, data=data) as response:
                         response.raise_for_status()
                         result = await response.json()
-                        return result['debug']['token']
+                        return result["debug"]["token"]
             except (Exception, ClientResponseError) as e:
                 if attempt < retries - 1:
                     await asyncio.sleep(5)
@@ -186,7 +210,7 @@ class Coresky:
                 return None
             
     async def score_detail(self, address: str, token: str, proxy=None, retries=5):
-        url = "https://www.coresky.com/api/user/score/detail"
+        url = f"{self.BASE_API}/api/user/score/detail"
         data = json.dumps({"page":1, "limit":10, "address":address})
         headers = {
             **self.headers,
@@ -200,8 +224,7 @@ class Coresky:
                 async with ClientSession(connector=connector, timeout=ClientTimeout(total=60)) as session:
                     async with session.post(url=url, headers=headers, data=data) as response:
                         response.raise_for_status()
-                        result = await response.json()
-                        return result['debug']
+                        return await response.json()
             except (Exception, ClientResponseError) as e:
                 if attempt < retries - 1:
                     await asyncio.sleep(5)
@@ -209,7 +232,7 @@ class Coresky:
                 return None
             
     async def claim_checkin(self, token: str, proxy=None, retries=5):
-        url = "https://www.coresky.com/api/taskwall/meme/sign"
+        url = f"{self.BASE_API}/api/taskwall/meme/sign"
         headers = {
             **self.headers,
             "Content-Length": "0",
@@ -221,72 +244,129 @@ class Coresky:
                 async with ClientSession(connector=connector, timeout=ClientTimeout(total=60)) as session:
                     async with session.post(url=url, headers=headers) as response:
                         response.raise_for_status()
-                        result = await response.json()
-                        return result['debug']
+                        return await response.json()
             except (Exception, ClientResponseError) as e:
                 if attempt < retries - 1:
                     await asyncio.sleep(5)
                     continue
                 return None
-
-    async def process_accounts(self, account: str, address, use_proxy: bool):
-        proxy = self.get_next_proxy_for_account(address) if use_proxy else None
-        token = None
-        while token is None:
-            token = await self.user_login(account, address, proxy)
-            if not token:
-                self.log(
-                    f"{Fore.CYAN+Style.BRIGHT}Status  :{Style.RESET_ALL}"
-                    f"{Fore.RED+Style.BRIGHT} Login Failed {Style.RESET_ALL}"
-                    f"{Fore.MAGENTA+Style.BRIGHT}-{Style.RESET_ALL}"
-                    f"{Fore.YELLOW+Style.BRIGHT} Retrying... {Style.RESET_ALL}"
-                )
-                proxy = self.get_next_proxy_for_account(address) if use_proxy else None
-                await asyncio.sleep(5)
-                continue
             
-            self.log(
-                f"{Fore.CYAN+Style.BRIGHT}Status  :{Style.RESET_ALL}"
-                f"{Fore.GREEN+Style.BRIGHT} Login Success {Style.RESET_ALL}"
-            )
+    async def process_check_connection(self, address: str, use_proxy: bool, rotate_proxy: bool):
+        message = "Checking Connection, Wait..."
+        if use_proxy:
+            message = "Checking Proxy Connection, Wait..."
+
+        print(
+            f"{Fore.CYAN + Style.BRIGHT}[ {datetime.now().astimezone(wib).strftime('%x %X %Z')} ]{Style.RESET_ALL}"
+            f"{Fore.WHITE + Style.BRIGHT} | {Style.RESET_ALL}"
+            f"{Fore.YELLOW + Style.BRIGHT}{message}{Style.RESET_ALL}",
+            end="\r",
+            flush=True
+        )
+
+        proxy = self.get_next_proxy_for_account(address) if use_proxy else None
+
+        if rotate_proxy:
+            is_valid = None
+            while is_valid is None:
+                is_valid = await self.check_connection(proxy)
+                if not is_valid:
+                    self.log(
+                        f"{Fore.CYAN+Style.BRIGHT}Proxy   :{Style.RESET_ALL}"
+                        f"{Fore.WHITE+Style.BRIGHT} {proxy} {Style.RESET_ALL}"
+                        f"{Fore.MAGENTA+Style.BRIGHT}-{Style.RESET_ALL}"
+                        f"{Fore.RED+Style.BRIGHT} Not 200 OK, {Style.RESET_ALL}"
+                        f"{Fore.YELLOW+Style.BRIGHT}Rotating Proxy...{Style.RESET_ALL}"
+                    )
+                    proxy = self.rotate_proxy_for_account(address) if use_proxy else None
+                    await asyncio.sleep(5)
+                    continue
+
+                self.log(
+                    f"{Fore.CYAN+Style.BRIGHT}Proxy   :{Style.RESET_ALL}"
+                    f"{Fore.WHITE+Style.BRIGHT} {proxy} {Style.RESET_ALL}"
+                    f"{Fore.MAGENTA+Style.BRIGHT}-{Style.RESET_ALL}"
+                    f"{Fore.GREEN+Style.BRIGHT} 200 OK {Style.RESET_ALL}                  "
+                )
+
+                return True
+
+        is_valid = await self.check_connection(proxy)
+        if not is_valid:
             self.log(
                 f"{Fore.CYAN+Style.BRIGHT}Proxy   :{Style.RESET_ALL}"
                 f"{Fore.WHITE+Style.BRIGHT} {proxy} {Style.RESET_ALL}"
+                f"{Fore.MAGENTA+Style.BRIGHT}-{Style.RESET_ALL}"
+                f"{Fore.RED+Style.BRIGHT} Not 200 OK {Style.RESET_ALL}          "
             )
+            return False
+        
+        self.log(
+            f"{Fore.CYAN+Style.BRIGHT}Proxy   :{Style.RESET_ALL}"
+            f"{Fore.WHITE+Style.BRIGHT} {proxy} {Style.RESET_ALL}"
+            f"{Fore.MAGENTA+Style.BRIGHT}-{Style.RESET_ALL}"
+            f"{Fore.GREEN+Style.BRIGHT} 200 OK {Style.RESET_ALL}                  "
+        )
 
-            balance = "N/A"
-            score = await self.score_detail(address, token, proxy)
-            if score:
-                balance = score.get("score", 0)
+        return True
+        
+    async def process_user_login(self, account: str, address: str, use_proxy: bool):
+        proxy = self.get_next_proxy_for_account(address) if use_proxy else None
 
+        token = await self.user_login(account, address, proxy)
+        if not token:
             self.log(
-                f"{Fore.CYAN+Style.BRIGHT}Balance :{Style.RESET_ALL}"
-                f"{Fore.WHITE+Style.BRIGHT} {balance} PTS {Style.RESET_ALL}"
+                f"{Fore.CYAN+Style.BRIGHT}Status  :{Style.RESET_ALL}"
+                f"{Fore.RED+Style.BRIGHT} Login Failed {Style.RESET_ALL}"
             )
+            return
+        
+        return token
 
-            status = f"{Fore.RED+Style.BRIGHT}Unknown Status"
-            day = "N/A"
-            checkin = await self.claim_checkin(token, proxy)
-            if checkin:
-                day = checkin.get("signDay")
-                reward = checkin.get("task", {}).get("rewardPoint")
+    async def process_accounts(self, account: str, address: str, use_proxy: bool, rotate_proxy: bool):
+        is_valid = await self.process_check_connection(address, use_proxy, rotate_proxy)
+        if is_valid:
+            token = await self.process_user_login(account, address, use_proxy)
+            if token:
+                proxy = self.get_next_proxy_for_account(address) if use_proxy else None
+                self.log(
+                    f"{Fore.CYAN+Style.BRIGHT}Status  :{Style.RESET_ALL}"
+                    f"{Fore.GREEN+Style.BRIGHT} Login Success {Style.RESET_ALL}"
+                )
 
-                if reward is None:
-                    status = f"{Fore.YELLOW+Style.BRIGHT}Already Claimed"
-                else:
-                    status = f"{Fore.GREEN+Style.BRIGHT}Is Claimed {Fore.MAGENTA+Style.BRIGHT}-{Fore.CYAN+Style.BRIGHT} Reward: {Fore.WHITE+Style.BRIGHT}{reward}"
+                balance = "N/A"
+                score = await self.score_detail(address, token, proxy)
+                if score:
+                    balance = score.get("debug", {}).get("score", 0)
 
-            self.log(
-                f"{Fore.CYAN+Style.BRIGHT}Check-In:{Style.RESET_ALL}"
-                f"{Fore.WHITE+Style.BRIGHT} Day {day} {status} {Style.RESET_ALL}"
-            )
+                self.log(
+                    f"{Fore.CYAN+Style.BRIGHT}Balance :{Style.RESET_ALL}"
+                    f"{Fore.WHITE+Style.BRIGHT} {balance} PTS {Style.RESET_ALL}"
+                )
+
+                checkin_day = "N/A"
+                status = f"{Fore.RED+Style.BRIGHT}Unknown Status"
+                checkin = await self.claim_checkin(token, proxy)
+                if checkin:
+                    checkin_day = checkin.get("debug", {}).get("signDay")
+                    reward = checkin.get("debug", {}).get("task", {}).get("rewardPoint")
+
+                    if reward is None:
+                        status = f"{Fore.YELLOW+Style.BRIGHT}Already Claimed"
+                    else:
+                        status = f"{Fore.GREEN+Style.BRIGHT}Is Claimed {Fore.MAGENTA+Style.BRIGHT}-{Fore.CYAN+Style.BRIGHT} Reward: {Fore.WHITE+Style.BRIGHT}{reward}"
+
+                self.log(
+                    f"{Fore.CYAN+Style.BRIGHT}Check-In:{Style.RESET_ALL}"
+                    f"{Fore.WHITE+Style.BRIGHT} Day {checkin_day} {status} {Style.RESET_ALL}"
+                )
 
     async def main(self):
         try:
             with open('accounts.txt', 'r') as file:
                 accounts = [line.strip() for line in file if line.strip()]
 
-            use_proxy_choice = self.print_question()
+            use_proxy_choice, rotate_proxy = self.print_question()
 
             use_proxy = False
             if use_proxy_choice in [1, 2]:
@@ -312,7 +392,7 @@ class Coresky:
                             f"{Fore.WHITE + Style.BRIGHT} {self.mask_account(address)} {Style.RESET_ALL}"
                             f"{Fore.CYAN + Style.BRIGHT}]{separator}{Style.RESET_ALL}"
                         )
-                        account = await self.process_accounts(account, address, use_proxy)
+                        account = await self.process_accounts(account, address, use_proxy, rotate_proxy)
 
                 self.log(f"{Fore.CYAN + Style.BRIGHT}={Style.RESET_ALL}"*72)
                 
