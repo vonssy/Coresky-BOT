@@ -343,23 +343,33 @@ class Coresky:
                     f"{Fore.CYAN+Style.BRIGHT}Balance :{Style.RESET_ALL}"
                     f"{Fore.WHITE+Style.BRIGHT} {balance} PTS {Style.RESET_ALL}"
                 )
-
-                checkin_day = "N/A"
-                status = f"{Fore.RED+Style.BRIGHT}Unknown Status"
+                
                 checkin = await self.claim_checkin(token, proxy)
                 if checkin:
-                    checkin_day = checkin.get("debug", {}).get("signDay")
-                    reward = checkin.get("debug", {}).get("task", {}).get("rewardPoint")
+                    checkin_day = checkin.get("debug", {}).get("signDay", "N/A")
+                    reward = checkin.get("debug", {}).get("task", {}).get("rewardPoint", None)
 
-                    if reward is None:
-                        status = f"{Fore.YELLOW+Style.BRIGHT}Already Claimed"
+                    if not reward:
+                        self.log(
+                            f"{Fore.CYAN+Style.BRIGHT}Check-In:{Style.RESET_ALL}"
+                            f"{Fore.WHITE+Style.BRIGHT} Day {checkin_day} {Style.RESET_ALL}"
+                            f"{Fore.YELLOW+Style.BRIGHT}Already Claimed{Style.RESET_ALL}"
+                        )
                     else:
-                        status = f"{Fore.GREEN+Style.BRIGHT}Is Claimed {Fore.MAGENTA+Style.BRIGHT}-{Fore.CYAN+Style.BRIGHT} Reward: {Fore.WHITE+Style.BRIGHT}{reward}"
+                        self.log(
+                            f"{Fore.CYAN+Style.BRIGHT}Check-In:{Style.RESET_ALL}"
+                            f"{Fore.WHITE+Style.BRIGHT} Day {checkin_day} {Style.RESET_ALL}"
+                            f"{Fore.YELLOW+Style.BRIGHT}Claimed Successfully{Style.RESET_ALL}"
+                            f"{Fore.MAGENTA+Style.BRIGHT} - {Style.RESET_ALL}"
+                            f"{Fore.CYAN+Style.BRIGHT}Reward:{Style.RESET_ALL}"
+                            f"{Fore.WHITE+Style.BRIGHT} {reward} PTS {Style.RESET_ALL}"
+                        )
 
-                self.log(
-                    f"{Fore.CYAN+Style.BRIGHT}Check-In:{Style.RESET_ALL}"
-                    f"{Fore.WHITE+Style.BRIGHT} Day {checkin_day} {status} {Style.RESET_ALL}"
-                )
+                else:
+                    self.log(
+                        f"{Fore.CYAN+Style.BRIGHT}Check-In:{Style.RESET_ALL}"
+                        f"{Fore.RED+Style.BRIGHT} GET Status Failed {Style.RESET_ALL}"
+                    )
 
     async def main(self):
         try:
