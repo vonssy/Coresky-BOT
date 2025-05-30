@@ -31,6 +31,7 @@ class Coresky:
         self.proxies = []
         self.proxy_index = 0
         self.account_proxies = {}
+        self.access_tokens = {}
 
     def clear_terminal(self):
         os.system('cls' if os.name == 'nt' else 'clear')
@@ -201,22 +202,21 @@ class Coresky:
                 async with ClientSession(connector=connector, timeout=ClientTimeout(total=60)) as session:
                     async with session.post(url=url, headers=headers, data=data) as response:
                         response.raise_for_status()
-                        result = await response.json()
-                        return result["debug"]["token"]
+                        return await response.json()
             except (Exception, ClientResponseError) as e:
                 if attempt < retries - 1:
                     await asyncio.sleep(5)
                     continue
                 return None
             
-    async def score_detail(self, address: str, token: str, proxy=None, retries=5):
+    async def score_detail(self, address: str, proxy=None, retries=5):
         url = f"{self.BASE_API}/api/user/score/detail"
         data = json.dumps({"page":1, "limit":10, "address":address})
         headers = {
             **self.headers,
             "Content-Length": str(len(data)),
             "Content-Type": "application/json",
-            "Token": token
+            "Token": self.access_tokens[address]
         }
         for attempt in range(retries):
             connector = ProxyConnector.from_url(proxy) if proxy else None
@@ -231,12 +231,12 @@ class Coresky:
                     continue
                 return None
             
-    async def claim_checkin(self, token: str, proxy=None, retries=5):
+    async def claim_checkin(self, address: str, proxy=None, retries=5):
         url = f"{self.BASE_API}/api/taskwall/meme/sign"
         headers = {
             **self.headers,
             "Content-Length": "0",
-            "Token": token
+            "Token": self.access_tokens[address]
         }
         for attempt in range(retries):
             connector = ProxyConnector.from_url(proxy) if proxy else None
@@ -313,30 +313,31 @@ class Coresky:
     async def process_user_login(self, account: str, address: str, use_proxy: bool):
         proxy = self.get_next_proxy_for_account(address) if use_proxy else None
 
-        token = await self.user_login(account, address, proxy)
-        if not token:
+        login = await self.user_login(account, address, proxy)
+        if login and login.get("code") == 200:
             self.log(
                 f"{Fore.CYAN+Style.BRIGHT}Status  :{Style.RESET_ALL}"
-                f"{Fore.RED+Style.BRIGHT} Login Failed {Style.RESET_ALL}"
+                f"{Fore.GREEN+Style.BRIGHT} Login Success {Style.RESET_ALL}"
             )
-            return
+            self.access_tokens[address] = login["debug"]["token"]
+            return True
         
-        return token
+        self.log(
+            f"{Fore.CYAN+Style.BRIGHT}Status  :{Style.RESET_ALL}"
+            f"{Fore.RED+Style.BRIGHT} Login Failed {Style.RESET_ALL}"
+        )
+        return False
 
     async def process_accounts(self, account: str, address: str, use_proxy: bool, rotate_proxy: bool):
         is_valid = await self.process_check_connection(address, use_proxy, rotate_proxy)
         if is_valid:
-            token = await self.process_user_login(account, address, use_proxy)
-            if token:
+            logined = await self.process_user_login(account, address, use_proxy)
+            if logined:
                 proxy = self.get_next_proxy_for_account(address) if use_proxy else None
-                self.log(
-                    f"{Fore.CYAN+Style.BRIGHT}Status  :{Style.RESET_ALL}"
-                    f"{Fore.GREEN+Style.BRIGHT} Login Success {Style.RESET_ALL}"
-                )
 
                 balance = "N/A"
-                score = await self.score_detail(address, token, proxy)
-                if score:
+                score = await self.score_detail(address, proxy)
+                if score and score.get("code") == 200:
                     balance = score.get("debug", {}).get("score", 0)
 
                 self.log(
@@ -344,8 +345,8 @@ class Coresky:
                     f"{Fore.WHITE+Style.BRIGHT} {balance} PTS {Style.RESET_ALL}"
                 )
                 
-                checkin = await self.claim_checkin(token, proxy)
-                if checkin:
+                checkin = await self.claim_checkin(address, proxy)
+                if checkin and checkin.get("code") == 200:
                     checkin_day = checkin.get("debug", {}).get("signDay", "N/A")
                     reward = checkin.get("debug", {}).get("task", {}).get("rewardPoint", None)
 
