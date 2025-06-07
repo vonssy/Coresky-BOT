@@ -12,6 +12,7 @@ Coresky BOT
   - Auto Run Without Proxy - `Choose 3`
   - Auto Rotate Invalid Proxies - `y` or `n`
   - Auto Claim Daily Check-In
+  - Auto Perform Vote Meme
   - Multi Accounts
 
 ## Requiremnets
@@ -39,6 +40,11 @@ Coresky BOT
   ```bash
     your_private_key_1
     your_private_key_2
+  ```
+
+- **project_id.txt:** You will find the file `project_id.txt` inside the project directory. Make sure `project_id.txt` contains data that matches the format expected by the script. Here are examples of file formats:
+  ```bash
+    your_meme_project_id
   ```
 
 - **proxy.txt:** You will find the file `proxy.txt` inside the project directory. Make sure `proxy.txt` contains data that matches the format expected by the script. Here are examples of file formats:

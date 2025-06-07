@@ -32,6 +32,7 @@ class Coresky:
         self.proxy_index = 0
         self.account_proxies = {}
         self.access_tokens = {}
+        self.project_id = "21748"
 
     def clear_terminal(self):
         os.system('cls' if os.name == 'nt' else 'clear')
@@ -57,6 +58,15 @@ class Coresky:
         hours, remainder = divmod(seconds, 3600)
         minutes, seconds = divmod(remainder, 60)
         return f"{int(hours):02}:{int(minutes):02}:{int(seconds):02}"
+    
+    def load_project_id(self):
+        try:
+            with open("project_id.txt", 'r') as file:
+                captcha_key = file.read().strip()
+
+            return captcha_key
+        except Exception as e:
+            return None
     
     async def load_proxies(self, use_proxy_choice: int):
         filename = "proxy.txt"
@@ -148,6 +158,14 @@ class Coresky:
 
     def print_question(self):
         while True:
+            auto_vote = input(f"{Fore.YELLOW + Style.BRIGHT}Auto Perform Vote Meme? [y/n] -> {Style.RESET_ALL}").strip()
+            if auto_vote in ["y", "n"]:
+                auto_vote = auto_vote == "y"
+                break
+            else:
+                print(f"{Fore.RED + Style.BRIGHT}Please enter 'y' or 'n'.{Style.RESET_ALL}")
+
+        while True:
             try:
                 print(f"{Fore.WHITE + Style.BRIGHT}1. Run With Proxyscrape Free Proxy{Style.RESET_ALL}")
                 print(f"{Fore.WHITE + Style.BRIGHT}2. Run With Private Proxy{Style.RESET_ALL}")
@@ -178,7 +196,7 @@ class Coresky:
                 else:
                     print(f"{Fore.RED + Style.BRIGHT}Invalid input. Enter 'y' or 'n'.{Style.RESET_ALL}")
 
-        return choose, rotate
+        return auto_vote, choose, rotate
     
     async def user_login(self, account: str, address: str, proxy=None, retries=5):
         url = f"{self.BASE_API}/api/user/login"
@@ -215,6 +233,7 @@ class Coresky:
             "Content-Type": "application/json",
             "Token": self.access_tokens[address]
         }
+        await asyncio.sleep(3)
         for attempt in range(retries):
             connector = ProxyConnector.from_url(proxy) if proxy else None
             try:
@@ -240,6 +259,7 @@ class Coresky:
             "Content-Length": "0",
             "Token": self.access_tokens[address]
         }
+        await asyncio.sleep(3)
         for attempt in range(retries):
             connector = ProxyConnector.from_url(proxy) if proxy else None
             try:
@@ -254,6 +274,34 @@ class Coresky:
                 return self.log(
                     f"{Fore.CYAN+Style.BRIGHT}Error   :{Style.RESET_ALL}"
                     f"{Fore.RED+Style.BRIGHT} Check-In Not Claimed {Style.RESET_ALL}"
+                    f"{Fore.MAGENTA+Style.BRIGHT}-{Style.RESET_ALL}"
+                    f"{Fore.YELLOW+Style.BRIGHT} {str(e)} {Style.RESET_ALL}"
+                )
+            
+    async def perform_vote(self, address: str, unvoted_points: int, proxy=None, retries=5):
+        url = f"{self.BASE_API}/api/taskwall/meme/vote"
+        data = json.dumps({"projectId":int(self.project_id), "voteNum":unvoted_points})
+        headers = {
+            **self.headers,
+            "Content-Length": str(len(data)),
+            "Content-Type": "application/json",
+            "Token": self.access_tokens[address]
+        }
+        await asyncio.sleep(3)
+        for attempt in range(retries):
+            connector = ProxyConnector.from_url(proxy) if proxy else None
+            try:
+                async with ClientSession(connector=connector, timeout=ClientTimeout(total=60)) as session:
+                    async with session.post(url=url, headers=headers, data=data, ssl=False) as response:
+                        response.raise_for_status()
+                        return await response.json()
+            except (Exception, ClientResponseError) as e:
+                if attempt < retries - 1:
+                    await asyncio.sleep(5)
+                    continue
+                return self.log(
+                    f"{Fore.CYAN+Style.BRIGHT}Error   :{Style.RESET_ALL}"
+                    f"{Fore.RED+Style.BRIGHT} Perform Vote Meme Failed {Style.RESET_ALL}"
                     f"{Fore.MAGENTA+Style.BRIGHT}-{Style.RESET_ALL}"
                     f"{Fore.YELLOW+Style.BRIGHT} {str(e)} {Style.RESET_ALL}"
                 )
@@ -282,7 +330,7 @@ class Coresky:
 
             return False
 
-    async def process_accounts(self, account: str, address: str, use_proxy: bool, rotate_proxy: bool):
+    async def process_accounts(self, account: str, address: str, auto_vote: bool, use_proxy: bool, rotate_proxy: bool):
         logined = await self.process_user_login(account, address, use_proxy, rotate_proxy)
         if logined:
             proxy = self.get_next_proxy_for_account(address) if use_proxy else None
@@ -311,18 +359,56 @@ class Coresky:
                     self.log(
                         f"{Fore.CYAN+Style.BRIGHT}Check-In:{Style.RESET_ALL}"
                         f"{Fore.WHITE+Style.BRIGHT} Day {checkin_day} {Style.RESET_ALL}"
-                        f"{Fore.YELLOW+Style.BRIGHT}Claimed Successfully{Style.RESET_ALL}"
+                        f"{Fore.GREEN+Style.BRIGHT}Claimed Successfully{Style.RESET_ALL}"
                         f"{Fore.MAGENTA+Style.BRIGHT} - {Style.RESET_ALL}"
                         f"{Fore.CYAN+Style.BRIGHT}Reward:{Style.RESET_ALL}"
                         f"{Fore.WHITE+Style.BRIGHT} {reward} PTS {Style.RESET_ALL}"
                     )
+
+            if auto_vote:
+                token = await self.user_token(address, proxy)
+                if isinstance(token, dict) and token.get("code") == 200:
+                    unvoted_points = token.get("debug", {}).get("score", 0)
+
+                    if unvoted_points > 0:
+                        vote = await self.perform_vote(address, unvoted_points, proxy)
+                        if isinstance(vote, dict) and vote.get("code") == 200:
+                            self.log(
+                                f"{Fore.CYAN+Style.BRIGHT}Vote    :{Style.RESET_ALL}"
+                                f"{Fore.GREEN+Style.BRIGHT} Success {Style.RESET_ALL}"
+                            )
+                            self.log(
+                                f"{Fore.MAGENTA+Style.BRIGHT}   >{Style.RESET_ALL}"
+                                f"{Fore.BLUE+Style.BRIGHT} Project Id: {Style.RESET_ALL}"
+                                f"{Fore.WHITE+Style.BRIGHT}{self.project_id}{Style.RESET_ALL}"
+                            )
+                            self.log(
+                                f"{Fore.MAGENTA+Style.BRIGHT}   >{Style.RESET_ALL}"
+                                f"{Fore.BLUE+Style.BRIGHT} Amount    : {Style.RESET_ALL}"
+                                f"{Fore.WHITE+Style.BRIGHT}{unvoted_points} PTS{Style.RESET_ALL}"
+                            )
+
+                    else:
+                        self.log(
+                            f"{Fore.CYAN+Style.BRIGHT}Vote    :{Style.RESET_ALL}"
+                            f"{Fore.YELLOW+Style.BRIGHT} Zero Balance {Style.RESET_ALL}"
+                        )
+            else:
+                self.log(
+                    f"{Fore.CYAN+Style.BRIGHT}Vote    :{Style.RESET_ALL}"
+                    f"{Fore.YELLOW+Style.BRIGHT} Skipped {Style.RESET_ALL}"
+                )
 
     async def main(self):
         try:
             with open('accounts.txt', 'r') as file:
                 accounts = [line.strip() for line in file if line.strip()]
 
-            use_proxy_choice, rotate_proxy = self.print_question()
+            project_id = self.load_project_id()
+            if project_id:
+                self.project_id = project_id
+
+            auto_vote, use_proxy_choice, rotate_proxy = self.print_question()
 
             use_proxy = False
             if use_proxy_choice in [1, 2]:
@@ -356,7 +442,7 @@ class Coresky:
                             )
                             continue
                         
-                        await self.process_accounts(account, address, use_proxy, rotate_proxy)
+                        await self.process_accounts(account, address, auto_vote, use_proxy, rotate_proxy)
 
                 self.log(f"{Fore.CYAN + Style.BRIGHT}={Style.RESET_ALL}"*72)
                 
