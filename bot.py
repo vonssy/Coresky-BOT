@@ -218,12 +218,14 @@ class Coresky:
                 if attempt < retries - 1:
                     await asyncio.sleep(5)
                     continue
-                return self.log(
+                self.log(
                     f"{Fore.CYAN+Style.BRIGHT}Error   :{Style.RESET_ALL}"
                     f"{Fore.RED+Style.BRIGHT} Login Failed {Style.RESET_ALL}"
                     f"{Fore.MAGENTA+Style.BRIGHT}-{Style.RESET_ALL}"
                     f"{Fore.YELLOW+Style.BRIGHT} {str(e)} {Style.RESET_ALL}"
                 )
+
+        return None
             
     async def user_token(self, address: str, proxy=None, retries=5):
         url = f"{self.BASE_API}/api/user/token"
@@ -245,12 +247,14 @@ class Coresky:
                 if attempt < retries - 1:
                     await asyncio.sleep(5)
                     continue
-                return self.log(
+                self.log(
                     f"{Fore.CYAN+Style.BRIGHT}Error   :{Style.RESET_ALL}"
                     f"{Fore.RED+Style.BRIGHT} GET Points Earned Failed {Style.RESET_ALL}"
                     f"{Fore.MAGENTA+Style.BRIGHT}-{Style.RESET_ALL}"
                     f"{Fore.YELLOW+Style.BRIGHT} {str(e)} {Style.RESET_ALL}"
                 )
+
+        return None
             
     async def claim_checkin(self, address: str, proxy=None, retries=5):
         url = f"{self.BASE_API}/api/taskwall/meme/sign"
@@ -271,12 +275,14 @@ class Coresky:
                 if attempt < retries - 1:
                     await asyncio.sleep(5)
                     continue
-                return self.log(
+                self.log(
                     f"{Fore.CYAN+Style.BRIGHT}Error   :{Style.RESET_ALL}"
                     f"{Fore.RED+Style.BRIGHT} Check-In Not Claimed {Style.RESET_ALL}"
                     f"{Fore.MAGENTA+Style.BRIGHT}-{Style.RESET_ALL}"
                     f"{Fore.YELLOW+Style.BRIGHT} {str(e)} {Style.RESET_ALL}"
                 )
+
+        return None
             
     async def perform_vote(self, address: str, unvoted_points: int, proxy=None, retries=5):
         url = f"{self.BASE_API}/api/taskwall/meme/vote"
@@ -299,12 +305,14 @@ class Coresky:
                 if attempt < retries - 1:
                     await asyncio.sleep(5)
                     continue
-                return self.log(
+                self.log(
                     f"{Fore.CYAN+Style.BRIGHT}Error   :{Style.RESET_ALL}"
                     f"{Fore.RED+Style.BRIGHT} Perform Vote Meme Failed {Style.RESET_ALL}"
                     f"{Fore.MAGENTA+Style.BRIGHT}-{Style.RESET_ALL}"
                     f"{Fore.YELLOW+Style.BRIGHT} {str(e)} {Style.RESET_ALL}"
                 )
+
+        return None
             
     async def process_user_login(self, account: str, address: str, use_proxy: bool, rotate_proxy: bool):
         while True:
