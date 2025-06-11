@@ -323,8 +323,9 @@ class Coresky:
             )
 
             login = await self.user_login(account, address, proxy)
-            if isinstance(login, dict) and login.get("code") == 200:
+            if login and login.get("code") == 200:
                 self.access_tokens[address] = login["debug"]["token"]
+
                 self.log(
                     f"{Fore.CYAN + Style.BRIGHT}Status  :{Style.RESET_ALL}"
                     f"{Fore.GREEN + Style.BRIGHT} Login Success {Style.RESET_ALL}"
@@ -343,17 +344,17 @@ class Coresky:
         if logined:
             proxy = self.get_next_proxy_for_account(address) if use_proxy else None
 
-            token = await self.user_token(address, proxy)
-            if isinstance(token, dict) and token.get("code") == 200:
-                balance = token.get("debug", {}).get("score", 0)
+            balance = await self.user_token(address, proxy)
+            if balance and balance.get("code") == 200:
+                score = balance.get("debug", {}).get("score", 0)
 
                 self.log(
                     f"{Fore.CYAN+Style.BRIGHT}Balance :{Style.RESET_ALL}"
-                    f"{Fore.WHITE+Style.BRIGHT} {balance} PTS {Style.RESET_ALL}"
+                    f"{Fore.WHITE+Style.BRIGHT} {score} PTS {Style.RESET_ALL}"
                 )
             
             checkin = await self.claim_checkin(address, proxy)
-            if isinstance(checkin, dict) and checkin.get("code") == 200:
+            if checkin and checkin.get("code") == 200:
                 checkin_day = checkin.get("debug", {}).get("signDay", "N/A")
                 reward = checkin.get("debug", {}).get("task", {}).get("rewardPoint", None)
 
@@ -374,13 +375,13 @@ class Coresky:
                     )
 
             if auto_vote:
-                token = await self.user_token(address, proxy)
-                if isinstance(token, dict) and token.get("code") == 200:
-                    unvoted_points = token.get("debug", {}).get("score", 0)
+                balance = await self.user_token(address, proxy)
+                if balance and balance.get("code") == 200:
+                    unvoted_points = balance.get("debug", {}).get("score", 0)
 
                     if unvoted_points > 0:
                         vote = await self.perform_vote(address, unvoted_points, proxy)
-                        if isinstance(vote, dict) and vote.get("code") == 200:
+                        if vote and vote.get("code") == 200:
                             self.log(
                                 f"{Fore.CYAN+Style.BRIGHT}Vote    :{Style.RESET_ALL}"
                                 f"{Fore.GREEN+Style.BRIGHT} Success {Style.RESET_ALL}"
