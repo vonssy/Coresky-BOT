@@ -12,7 +12,7 @@ Coresky BOT
   - Auto Run Without Proxy - `Choose 3`
   - Auto Rotate Invalid Proxies - `y` or `n`
   - Auto Claim Daily Check-In
-  - Auto Perform Vote Meme
+  - Auto Perform MemeVote
   - Multi Accounts
 
 ## Requiremnets
