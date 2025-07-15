@@ -1,7 +1,8 @@
 from aiohttp import (
     ClientResponseError,
     ClientSession,
-    ClientTimeout
+    ClientTimeout,
+    BasicAuth
 )
 from aiohttp_socks import ProxyConnector
 from fake_useragent import FakeUserAgent
@@ -12,7 +13,7 @@ from Crypto.Cipher import AES
 from Crypto.Util.Padding import pad
 from datetime import datetime
 from colorama import *
-import asyncio, base64, json, cv2, os, pytz
+import asyncio, base64, json, cv2, re, os, pytz
 
 wib = pytz.timezone('Asia/Jakarta')
 
@@ -49,7 +50,7 @@ class Coresky:
     def welcome(self):
         print(
             f"""
-        {Fore.GREEN + Style.BRIGHT}Auto Claim {Fore.BLUE + Style.BRIGHT}Coresky - BOT
+        {Fore.GREEN + Style.BRIGHT}Coresky {Fore.BLUE + Style.BRIGHT}Auto BOT
             """
             f"""
         {Fore.GREEN + Style.BRIGHT}Rey? {Fore.YELLOW + Style.BRIGHT}<INI WATERMARK>
@@ -75,7 +76,7 @@ class Coresky:
         try:
             if use_proxy_choice == 1:
                 async with ClientSession(timeout=ClientTimeout(total=30)) as session:
-                    async with session.get("https://api.proxyscrape.com/v4/free-proxy-list/get?request=display_proxies&proxy_format=protocolipport&format=text") as response:
+                    async with session.get("https://raw.githubusercontent.com/monosans/proxy-list/refs/heads/main/proxies/http.txt") as response:
                         response.raise_for_status()
                         content = await response.text()
                         with open(filename, 'w') as f:
@@ -123,6 +124,26 @@ class Coresky:
         self.account_proxies[account] = proxy
         self.proxy_index = (self.proxy_index + 1) % len(self.proxies)
         return proxy
+    
+    def build_proxy_config(self, proxy=None):
+        if not proxy:
+            return None, None, None
+
+        if proxy.startswith("socks"):
+            connector = ProxyConnector.from_url(proxy)
+            return connector, None, None
+
+        elif proxy.startswith("http"):
+            match = re.match(r"http://(.*?):(.*?)@(.*)", proxy)
+            if match:
+                username, password, host_port = match.groups()
+                clean_url = f"http://{host_port}"
+                auth = BasicAuth(username, password)
+                return None, clean_url, auth
+            else:
+                return None, proxy, None
+
+        raise Exception("Unsupported Proxy Type.")
         
     def generate_address(self, account: str):
         try:
@@ -130,6 +151,13 @@ class Coresky:
             address = account.address
 
             return address
+        except Exception as e:
+            return None
+        
+    def mask_account(self, account):
+        try:
+            mask_account = account[:6] + '*' * 6 + account[-6:]
+            return mask_account
         except Exception as e:
             return None
     
@@ -150,13 +178,6 @@ class Coresky:
             return payload
         except Exception as e:
             raise Exception(f"Generate Req Payload Failed: {str(e)}")
-    
-    def mask_account(self, account):
-        try:
-            mask_account = account[:6] + '*' * 6 + account[-6:]
-            return mask_account
-        except Exception as e:
-            return None
 
     def decode_base64_to_image(self, base64_str, filename):
         folder_path = "images"
@@ -298,7 +319,24 @@ class Coresky:
 
         return choose, rotate
     
-    async def user_login(self, account: str, address: str, proxy=None, retries=5):
+    async def check_connection(self, proxy_url=None):
+        connector, proxy, proxy_auth = self.build_proxy_config(proxy_url)
+        try:
+            async with ClientSession(connector=connector, timeout=ClientTimeout(total=30)) as session:
+                async with session.get(url="https://api.ipify.org?format=json", proxy=proxy, proxy_auth=proxy_auth) as response:
+                    response.raise_for_status()
+                    return True
+        except (Exception, ClientResponseError) as e:
+            self.log(
+                f"{Fore.CYAN+Style.BRIGHT}Status    :{Style.RESET_ALL}"
+                f"{Fore.RED+Style.BRIGHT} Connection Not 200 OK {Style.RESET_ALL}"
+                f"{Fore.MAGENTA+Style.BRIGHT}-{Style.RESET_ALL}"
+                f"{Fore.YELLOW+Style.BRIGHT} {str(e)} {Style.RESET_ALL}"
+            )
+        
+        return None
+    
+    async def user_login(self, account: str, address: str, proxy_url=None, retries=5):
         url = f"{self.BASE_API}/api/user/login"
         data = json.dumps(self.generate_payload(account, address))
         headers = {
@@ -308,10 +346,10 @@ class Coresky:
             "Token": ""
         }
         for attempt in range(retries):
-            connector = ProxyConnector.from_url(proxy) if proxy else None
+            connector, proxy, proxy_auth = self.build_proxy_config(proxy_url)
             try:
                 async with ClientSession(connector=connector, timeout=ClientTimeout(total=60)) as session:
-                    async with session.post(url=url, headers=headers, data=data, ssl=False) as response:
+                    async with session.post(url=url, headers=headers, data=data, proxy=proxy, proxy_auth=proxy_auth) as response:
                         response.raise_for_status()
                         return await response.json()
             except (Exception, ClientResponseError) as e:
@@ -320,7 +358,7 @@ class Coresky:
                     continue
                 return None
             
-    async def user_token(self, address: str, proxy=None, retries=5):
+    async def user_token(self, address: str, proxy_url=None, retries=5):
         url = f"{self.BASE_API}/api/user/token"
         headers = {
             **self.headers,
@@ -330,10 +368,10 @@ class Coresky:
         }
         await asyncio.sleep(3)
         for attempt in range(retries):
-            connector = ProxyConnector.from_url(proxy) if proxy else None
+            connector, proxy, proxy_auth = self.build_proxy_config(proxy_url)
             try:
                 async with ClientSession(connector=connector, timeout=ClientTimeout(total=60)) as session:
-                    async with session.post(url=url, headers=headers, json={}, ssl=False) as response:
+                    async with session.post(url=url, headers=headers, json={}, proxy=proxy, proxy_auth=proxy_auth) as response:
                         response.raise_for_status()
                         return await response.json()
             except (Exception, ClientResponseError) as e:
@@ -342,7 +380,7 @@ class Coresky:
                     continue
                 return None
     
-    async def get_captcha(self, address: str, proxy=None, retries=5):
+    async def get_captcha(self, address: str, proxy_url=None, retries=5):
         url = f"{self.BASE_API}/api/captcha/get"
         data = json.dumps({"captchaType":"blockPuzzle"})
         headers = {
@@ -353,10 +391,10 @@ class Coresky:
         }
         await asyncio.sleep(3)
         for attempt in range(retries):
-            connector = ProxyConnector.from_url(proxy) if proxy else None
+            connector, proxy, proxy_auth = self.build_proxy_config(proxy_url)
             try:
                 async with ClientSession(connector=connector, timeout=ClientTimeout(total=60)) as session:
-                    async with session.post(url=url, headers=headers, data=data, ssl=False) as response:
+                    async with session.post(url=url, headers=headers, data=data, proxy=proxy, proxy_auth=proxy_auth) as response:
                         response.raise_for_status()
                         return await response.json()
             except (Exception, ClientResponseError) as e:
@@ -365,7 +403,7 @@ class Coresky:
                     continue
                 return None
     
-    async def check_captcha(self, address: str, point_json: str, captcha_token: str, proxy=None, retries=5):
+    async def check_captcha(self, address: str, point_json: str, captcha_token: str, proxy_url=None, retries=5):
         url = f"{self.BASE_API}/api/captcha/check"
         data = json.dumps({"captchaType":"blockPuzzle", "pointJson":point_json, "token":captcha_token})
         headers = {
@@ -376,10 +414,10 @@ class Coresky:
         }
         await asyncio.sleep(3)
         for attempt in range(retries):
-            connector = ProxyConnector.from_url(proxy) if proxy else None
+            connector, proxy, proxy_auth = self.build_proxy_config(proxy_url)
             try:
                 async with ClientSession(connector=connector, timeout=ClientTimeout(total=60)) as session:
-                    async with session.post(url=url, headers=headers, data=data, ssl=False) as response:
+                    async with session.post(url=url, headers=headers, data=data, proxy=proxy, proxy_auth=proxy_auth) as response:
                         response.raise_for_status()
                         return await response.json()
             except (Exception, ClientResponseError) as e:
@@ -388,7 +426,7 @@ class Coresky:
                     continue
                 return None
             
-    async def claim_checkin(self, address: str, response_token: str, proxy=None, retries=5):
+    async def claim_checkin(self, address: str, response_token: str, proxy_url=None, retries=5):
         url = f"{self.BASE_API}/api/taskwall/meme/sign"
         data = json.dumps({"responseToken":response_token})
         headers = {
@@ -399,10 +437,10 @@ class Coresky:
         }
         await asyncio.sleep(3)
         for attempt in range(retries):
-            connector = ProxyConnector.from_url(proxy) if proxy else None
+            connector, proxy, proxy_auth = self.build_proxy_config(proxy_url)
             try:
                 async with ClientSession(connector=connector, timeout=ClientTimeout(total=60)) as session:
-                    async with session.post(url=url, headers=headers, data=data, ssl=False) as response:
+                    async with session.post(url=url, headers=headers, data=data, proxy=proxy, proxy_auth=proxy_auth) as response:
                         response.raise_for_status()
                         return await response.json()
             except (Exception, ClientResponseError) as e:
@@ -411,7 +449,7 @@ class Coresky:
                     continue
                 return None
             
-    async def perform_vote(self, address: str, unvoted_points: int, proxy=None, retries=5):
+    async def perform_vote(self, address: str, unvoted_points: int, proxy_url=None, retries=5):
         url = f"{self.BASE_API}/api/taskwall/meme/vote"
         data = json.dumps({"projectId":int(self.project_id), "voteNum":unvoted_points})
         headers = {
@@ -422,10 +460,10 @@ class Coresky:
         }
         await asyncio.sleep(3)
         for attempt in range(retries):
-            connector = ProxyConnector.from_url(proxy) if proxy else None
+            connector, proxy, proxy_auth = self.build_proxy_config(proxy_url)
             try:
                 async with ClientSession(connector=connector, timeout=ClientTimeout(total=60)) as session:
-                    async with session.post(url=url, headers=headers, data=data, ssl=False) as response:
+                    async with session.post(url=url, headers=headers, data=data, proxy=proxy, proxy_auth=proxy_auth) as response:
                         response.raise_for_status()
                         return await response.json()
             except (Exception, ClientResponseError) as e:
@@ -434,13 +472,27 @@ class Coresky:
                     continue
                 return None
             
-    async def process_user_login(self, account: str, address: str, use_proxy: bool, rotate_proxy: bool):
+    async def process_check_connection(self, address: str, use_proxy: bool, rotate_proxy: bool):
         while True:
             proxy = self.get_next_proxy_for_account(address) if use_proxy else None
             self.log(
                 f"{Fore.CYAN+Style.BRIGHT}Proxy    :{Style.RESET_ALL}"
                 f"{Fore.WHITE+Style.BRIGHT} {proxy} {Style.RESET_ALL}"
             )
+
+            is_valid = await self.check_connection(proxy)
+            if not is_valid:
+                if rotate_proxy:
+                    proxy = self.rotate_proxy_for_account(address)
+
+                continue
+
+            return True
+            
+    async def process_user_login(self, account: str, address: str, use_proxy: bool, rotate_proxy: bool):
+        is_valid = await self.process_check_connection(address, use_proxy, rotate_proxy)
+        if is_valid:
+            proxy = self.get_next_proxy_for_account(address) if use_proxy else None
 
             login = await self.user_login(account, address, proxy)
             if isinstance(login, dict) and login.get("message") == "success":
@@ -456,11 +508,6 @@ class Coresky:
                 f"{Fore.CYAN + Style.BRIGHT}Status   :{Style.RESET_ALL}"
                 f"{Fore.RED + Style.BRIGHT} Login Failed {Style.RESET_ALL}"
             )
-
-            if rotate_proxy:
-                proxy = self.rotate_proxy_for_account(address)
-                await asyncio.sleep(5)
-                continue
 
             return False
         
